@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>qr-code-generator</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0a0a0a;
+      color: #c9d1d9;
+      font-family: 'Courier New', 'Menlo', 'Monaco', monospace;
+      font-size: 13px;
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 40px 16px;
+    }
+
+    .app { width: 100%; max-width: 800px; }
+
+    .card {
+      border: 1px solid #21262d;
+      background: #0d1117;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 16px;
+      border-bottom: 1px solid #21262d;
+    }
+
+    .header-title { color: #8b949e; }
+    .header-title .dollar { color: #3fb950; }
+    .header-title .name  { color: #e6edf3; }
+
+    .deleted-badge {
+      display: none;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid #f85149;
+      padding: 2px 10px;
+      color: #f85149;
+      font-size: 11px;
+      letter-spacing: 0.8px;
+    }
+    .deleted-badge.show { display: flex; }
+    .deleted-badge::before { content: '●'; font-size: 8px; line-height: 1; }
+
+    /* ── URL input row ── */
+    .input-row {
+      display: flex;
+      align-items: center;
+      padding: 10px 16px;
+      gap: 10px;
+      border-bottom: 1px solid #21262d;
+    }
+
+    .input-label { color: #8b949e; white-space: nowrap; user-select: none; }
+
+    .url-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #e6edf3;
+      font-family: inherit;
+      font-size: 13px;
+    }
+    .url-input::placeholder { color: #3d444d; }
+
+    .generate-btn {
+      flex-shrink: 0;
+      background: transparent;
+      border: 1px solid #3fb950;
+      color: #3fb950;
+      padding: 4px 16px;
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.1s;
+    }
+    .generate-btn:hover:not(:disabled) { background: rgba(63,185,80,0.08); }
+    .generate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Notice (error / loading) ── */
+    .notice {
+      display: none;
+      padding: 7px 16px;
+      font-size: 12px;
+      border-bottom: 1px solid #21262d;
+    }
+    .notice.show     { display: block; }
+    .notice.is-error { color: #f85149; }
+    .notice.is-info  { color: #8b949e; }
+
+    /* ── Result panel ── */
+    .result-panel {
+      display: none;
+      padding: 16px;
+      gap: 20px;
+      border-bottom: 1px solid #21262d;
+    }
+    .result-panel.show { display: flex; }
+
+    .qr-wrap {
+      flex-shrink: 0;
+      width: 155px;
+      height: 155px;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .qr-wrap img { width: 100%; height: 100%; object-fit: contain; display: block; }
+
+    .info-block {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .info-row {
+      display: flex;
+      gap: 12px;
+      align-items: baseline;
+      line-height: 1.6;
+    }
+
+    .lbl {
+      color: #6e7681;
+      font-size: 12px;
+      min-width: 58px;
+      flex-shrink: 0;
+      letter-spacing: 0.3px;
+    }
+
+    .val           { color: #e6edf3; }
+    .val.green     { color: #3fb950; }
+    .val.blue  a   { color: #79c0ff; text-decoration: none; }
+    .val.blue  a:hover { text-decoration: underline; }
+    .val.red       { color: #f85149; }
+    .val.dim       { color: #8b949e; }
+
+    .info-sep { height: 8px; }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2px 0;
+    }
+
+    /* ── Redirect status bar ── */
+    .redirect-status {
+      display: none;
+      padding: 7px 16px;
+      font-size: 12px;
+      border-bottom: 1px solid #21262d;
+    }
+    .redirect-status.show    { display: block; }
+    .redirect-status.active  { color: #3fb950; }
+    .redirect-status.gone    { color: #f85149; }
+    .redirect-status.expired { color: #d29922; }
+
+    /* ── Action buttons ── */
+    .action-row {
+      display: none;
+      padding: 9px 16px;
+      gap: 8px;
+      border-bottom: 1px solid #21262d;
+    }
+    .action-row.show { display: flex; }
+
+    .btn {
+      background: transparent;
+      border: 1px solid #30363d;
+      color: #c9d1d9;
+      padding: 4px 12px;
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .btn:hover:not(:disabled) { border-color: #6e7681; }
+    .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    .btn.danger { border-color: rgba(248,81,73,0.35); color: #f85149; }
+    .btn.danger:hover:not(:disabled) { border-color: #f85149; background: rgba(248,81,73,0.06); }
+
+    /* ── Analytics panel ── */
+    .analytics-panel {
+      display: none;
+      padding: 9px 16px;
+      gap: 20px;
+      font-size: 12px;
+      color: #8b949e;
+      flex-wrap: wrap;
+    }
+    .analytics-panel.show { display: flex; }
+    .analytics-panel .hi { color: #3fb950; }
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="card">
+
+    <!-- Header -->
+    <div class="header">
+      <span class="header-title">
+        <span class="dollar">$</span>
+        <span class="name"> qr-code-generator</span>
+        <span> — dynamic link manager</span>
+      </span>
+      <div class="deleted-badge" id="deletedBadge">DELETED</div>
+    </div>
+
+    <!-- URL input -->
+    <div class="input-row">
+      <span class="input-label">url:</span>
+      <input class="url-input" id="urlInput" type="text"
+             placeholder="https://example.com" autocomplete="off" spellcheck="false" />
+      <button class="generate-btn" id="generateBtn">↵ generate</button>
+    </div>
+
+    <!-- Notice -->
+    <div class="notice" id="notice"></div>
+
+    <!-- QR result -->
+    <div class="result-panel" id="resultPanel">
+      <div class="qr-wrap">
+        <img id="qrImg" src="" alt="QR Code" />
+      </div>
+      <div class="info-block">
+        <div class="info-row">
+          <span class="lbl">TOKEN</span>
+          <span class="val green" id="iToken"></span>
+        </div>
+        <div class="info-row">
+          <span class="lbl">SHORT</span>
+          <span class="val blue"><a id="iShort" href="" target="_blank" rel="noopener"></a></span>
+        </div>
+        <div class="info-row">
+          <span class="lbl">TARGET</span>
+          <span class="val" id="iTarget"></span>
+        </div>
+        <div class="info-sep"></div>
+        <div class="meta-grid">
+          <div class="info-row">
+            <span class="lbl">CREATED</span>
+            <span class="val" id="iCreated"></span>
+          </div>
+          <div class="info-row">
+            <span class="lbl">UPDATED</span>
+            <span class="val" id="iUpdated"></span>
+          </div>
+          <div class="info-row">
+            <span class="lbl">EXPIRES</span>
+            <span class="val" id="iExpires"></span>
+          </div>
+          <div class="info-row">
+            <span class="lbl">DELETED</span>
+            <span class="val" id="iDeleted"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Redirect status line -->
+    <div class="redirect-status" id="redirectStatus"></div>
+
+    <!-- Actions -->
+    <div class="action-row" id="actionRow">
+      <button class="btn" id="analyticsBtn">analytics</button>
+      <button class="btn" id="testRedirectBtn">test redirect</button>
+      <button class="btn danger" id="deleteBtn">delete</button>
+    </div>
+
+    <!-- Analytics -->
+    <div class="analytics-panel" id="analyticsPanel"></div>
+
+  </div>
+</div>
+
+<script>
+  const $ = id => document.getElementById(id);
+
+  let token = null;
+  let shortUrl = null;
+  let analyticsOpen = false;
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+
+  function fmt(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso.endsWith('Z') ? iso : iso + 'Z');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mi = String(d.getMinutes()).padStart(2, '0');
+    return `${mm}/${dd} ${hh}:${mi}`;
+  }
+
+  function redirectStatus(info) {
+    if (info.is_deleted)
+      return { code: 410, cls: 'gone', sym: '✗', reason: 'deleted' };
+    if (info.expires_at) {
+      const exp = new Date(info.expires_at.endsWith('Z') ? info.expires_at : info.expires_at + 'Z');
+      if (exp < new Date())
+        return { code: 410, cls: 'expired', sym: '✗', reason: 'expired' };
+    }
+    return { code: 302, cls: 'active', sym: '✓', reason: 'active' };
+  }
+
+  function notice(msg, type = 'error') {
+    const el = $('notice');
+    el.textContent = msg;
+    el.className = `notice show is-${type}`;
+  }
+  function clearNotice() { $('notice').className = 'notice'; }
+
+  // ── Render ───────────────────────────────────────────────────────────────
+
+  function render(info, createdShortUrl) {
+    if (createdShortUrl) shortUrl = createdShortUrl;
+    const displayShort = shortUrl || `${location.origin}/r/${token}`;
+
+    $('qrImg').src = `/api/qr/${token}/image?_=${Date.now()}`;
+
+    $('iToken').textContent = token;
+
+    const a = $('iShort');
+    a.textContent = displayShort;
+    a.href = displayShort;
+
+    $('iTarget').textContent = info.original_url;
+    $('iCreated').textContent = fmt(info.created_at);
+    $('iUpdated').textContent = fmt(info.updated_at);
+    $('iExpires').textContent = fmt(info.expires_at);
+
+    const delEl = $('iDeleted');
+    if (info.is_deleted) {
+      delEl.textContent = 'yes';
+      delEl.className = 'val red';
+      $('deletedBadge').classList.add('show');
+    } else {
+      delEl.textContent = 'no';
+      delEl.className = 'val dim';
+      $('deletedBadge').classList.remove('show');
+    }
+
+    const rs = redirectStatus(info);
+    const rsEl = $('redirectStatus');
+    rsEl.className = `redirect-status show ${rs.cls}`;
+    rsEl.textContent = `${rs.sym} ${rs.reason} — /r/${token} returns ${rs.code}`;
+
+    $('resultPanel').classList.add('show');
+    $('actionRow').classList.add('show');
+
+    const delBtn = $('deleteBtn');
+    if (info.is_deleted) {
+      delBtn.disabled = true;
+      delBtn.textContent = 'deleted';
+    } else {
+      delBtn.disabled = false;
+      delBtn.textContent = 'delete';
+    }
+  }
+
+  // ── Generate ─────────────────────────────────────────────────────────────
+
+  $('generateBtn').addEventListener('click', async () => {
+    const url = $('urlInput').value.trim();
+    if (!url) return;
+
+    clearNotice();
+    $('generateBtn').disabled = true;
+    $('generateBtn').textContent = '...';
+
+    analyticsOpen = false;
+    $('analyticsPanel').classList.remove('show');
+    $('analyticsPanel').innerHTML = '';
+
+    try {
+      const cr = await fetch('/api/qr/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+
+      if (!cr.ok) {
+        const e = await cr.json().catch(() => ({}));
+        throw new Error(e.detail || `HTTP ${cr.status}`);
+      }
+
+      const created = await cr.json();
+      token = created.token;
+
+      const ir = await fetch(`/api/qr/${token}`);
+      if (!ir.ok) throw new Error(`Could not fetch metadata (HTTP ${ir.status})`);
+      const info = await ir.json();
+
+      render(info, created.short_url);
+    } catch (e) {
+      notice(`✗ ${e.message}`);
+    } finally {
+      $('generateBtn').disabled = false;
+      $('generateBtn').textContent = '↵ generate';
+    }
+  });
+
+  $('urlInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') $('generateBtn').click();
+  });
+
+  // ── Analytics ─────────────────────────────────────────────────────────────
+
+  $('analyticsBtn').addEventListener('click', async () => {
+    if (analyticsOpen) {
+      $('analyticsPanel').classList.remove('show');
+      analyticsOpen = false;
+      return;
+    }
+    try {
+      const r = await fetch(`/api/qr/${token}/analytics`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = await r.json();
+
+      let html = `<span>total_scans <span class="hi">${data.total_scans}</span></span>`;
+      for (const row of (data.scans_by_day || [])) {
+        html += `<span>${row.date} <span class="hi">${row.count}</span></span>`;
+      }
+      $('analyticsPanel').innerHTML = html;
+      $('analyticsPanel').classList.add('show');
+      analyticsOpen = true;
+    } catch (e) {
+      notice(`✗ analytics: ${e.message}`);
+    }
+  });
+
+  // ── Test redirect ─────────────────────────────────────────────────────────
+
+  $('testRedirectBtn').addEventListener('click', () => {
+    if (!token) return;
+    window.open(`/r/${token}`, '_blank', 'noopener,noreferrer');
+  });
+
+  // ── Soft delete ───────────────────────────────────────────────────────────
+
+  $('deleteBtn').addEventListener('click', async () => {
+    if (!token) return;
+    if (!confirm(`Soft-delete /r/${token}?\n\nThe record is kept; /r/${token} will return 410.`)) return;
+
+    try {
+      const r = await fetch(`/api/qr/${token}`, { method: 'DELETE' });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+
+      const ir = await fetch(`/api/qr/${token}`);
+      const info = await ir.json();
+      render(info, null);
+    } catch (e) {
+      notice(`✗ ${e.message}`);
+    }
+  });
+</script>
+</body>
+</html>

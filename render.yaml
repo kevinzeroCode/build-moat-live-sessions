@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: qr-code-generator
+    runtime: python
+    rootDir: qr_code_generator/scaffold
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: BASE_URL
+        sync: false   # Set this to your Render service URL after first deploy
+                      # e.g. https://qr-code-generator.onrender.com

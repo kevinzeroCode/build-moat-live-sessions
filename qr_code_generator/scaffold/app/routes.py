@@ -1,4 +1,5 @@
 import io
+import os
 from datetime import datetime
 
 import qrcode
@@ -18,7 +19,7 @@ router = APIRouter()
 # In-memory cache (simulates Redis for prototype)
 redirect_cache: dict[str, str] = {}
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = os.getenv("BASE_URL", "http://localhost:8000").rstrip("/")
 
 
 @router.post("/api/qr/create", response_model=CreateResponse)
@@ -80,7 +81,7 @@ def redirect(token: str, request: Request, db: Session = Depends(get_db)):
 
 @router.get("/api/qr/{token}", response_model=QRInfoResponse)
 def get_qr_info(token: str, db: Session = Depends(get_db)):
-    mapping = _get_mapping_or_404(token, db)
+    mapping = _get_or_404(token, db)
     return mapping
 
 
@@ -118,7 +119,7 @@ def delete_qr(token: str, db: Session = Depends(get_db)):
 
 @router.get("/api/qr/{token}/image")
 def get_qr_image(token: str, db: Session = Depends(get_db)):
-    _get_mapping_or_404(token, db)
+    _get_or_404(token, db)
     short_url = f"{BASE_URL}/r/{token}"
 
     img = qrcode.make(short_url)
@@ -130,7 +131,7 @@ def get_qr_image(token: str, db: Session = Depends(get_db)):
 
 @router.get("/api/qr/{token}/analytics")
 def get_analytics(token: str, db: Session = Depends(get_db)):
-    _get_mapping_or_404(token, db)
+    _get_or_404(token, db)
 
     total = db.query(func.count(ScanEvent.id)).filter(ScanEvent.token == token).scalar()
 
@@ -154,6 +155,14 @@ def get_analytics(token: str, db: Session = Depends(get_db)):
 def _get_mapping_or_404(token: str, db: Session) -> UrlMapping:
     mapping = db.query(UrlMapping).filter(UrlMapping.token == token).first()
     if mapping is None or mapping.is_deleted:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return mapping
+
+
+def _get_or_404(token: str, db: Session) -> UrlMapping:
+    """Fetch by token regardless of deleted state; raises 404 only when token never existed."""
+    mapping = db.query(UrlMapping).filter(UrlMapping.token == token).first()
+    if mapping is None:
         raise HTTPException(status_code=404, detail="Not Found")
     return mapping
 
