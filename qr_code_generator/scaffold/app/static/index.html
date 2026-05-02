@@ -161,14 +161,25 @@
     /* ── Redirect status bar ── */
     .redirect-status {
       display: none;
-      padding: 7px 16px;
+      padding: 7px 16px 3px;
       font-size: 12px;
-      border-bottom: 1px solid #21262d;
     }
     .redirect-status.show    { display: block; }
     .redirect-status.active  { color: #3fb950; }
     .redirect-status.gone    { color: #f85149; }
     .redirect-status.expired { color: #d29922; }
+
+    /* ── Cache status bar ── */
+    .cache-status {
+      display: none;
+      padding: 3px 16px 7px;
+      font-size: 12px;
+      color: #8b949e;
+      border-bottom: 1px solid #21262d;
+    }
+    .cache-status.show { display: block; }
+    .cache-status .hit  { color: #3fb950; }
+    .cache-status .miss { color: #484f58; }
 
     /* ── Action buttons ── */
     .action-row {
@@ -300,6 +311,8 @@
 
     <!-- Redirect status line -->
     <div class="redirect-status" id="redirectStatus"></div>
+    <!-- Cache status line -->
+    <div class="cache-status" id="cacheStatus"></div>
 
     <!-- Actions -->
     <div class="action-row" id="actionRow">
@@ -342,6 +355,24 @@
         return { code: 410, cls: 'expired', sym: '✗', reason: 'expired' };
     }
     return { code: 302, cls: 'active', sym: '✓', reason: 'active' };
+  }
+
+  // ── Cache status ──────────────────────────────────────────────────────────
+
+  async function refreshCacheStatus() {
+    if (!token) return;
+    try {
+      const r = await fetch(`/api/qr/${token}/cache-status`);
+      if (!r.ok) return;
+      const { cached, cached_url } = await r.json();
+      const el = $('cacheStatus');
+      if (cached) {
+        el.innerHTML = `cache  <span class="hit">● cached</span>  →  ${cached_url}`;
+      } else {
+        el.innerHTML = `cache  <span class="miss">○ not cached</span>`;
+      }
+      el.classList.add('show');
+    } catch (_) {}
   }
 
   function notice(msg, type = 'error') {
@@ -435,6 +466,7 @@
       const info = await ir.json();
 
       render(info, created.short_url);
+      await refreshCacheStatus();
     } catch (e) {
       notice(`✗ ${e.message}`);
     } finally {
@@ -477,6 +509,7 @@
   $('testRedirectBtn').addEventListener('click', () => {
     if (!token) return;
     window.open(`/r/${token}`, '_blank', 'noopener,noreferrer');
+    setTimeout(refreshCacheStatus, 800);
   });
 
   // ── Edit target URL ───────────────────────────────────────────────────────
@@ -545,6 +578,7 @@
       const info = await r.json();
       clearNotice();
       render(info, null);
+      await refreshCacheStatus();
     } catch (e) {
       notice(`✗ update failed: ${e.message}`);
       $('iTarget').textContent = originalTarget;
@@ -564,6 +598,7 @@
       const ir = await fetch(`/api/qr/${token}`);
       const info = await ir.json();
       render(info, null);
+      await refreshCacheStatus();
     } catch (e) {
       notice(`✗ ${e.message}`);
     }

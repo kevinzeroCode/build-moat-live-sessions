@@ -129,6 +129,13 @@ def get_qr_image(token: str, db: Session = Depends(get_db)):
     return StreamingResponse(buf, media_type="image/png")
 
 
+@router.get("/api/qr/{token}/cache-status")
+def get_cache_status(token: str, db: Session = Depends(get_db)):
+    _get_or_404(token, db)
+    cached = token in redirect_cache
+    return {"cached": cached, "cached_url": redirect_cache.get(token)}
+
+
 @router.get("/api/qr/{token}/analytics")
 def get_analytics(token: str, db: Session = Depends(get_db)):
     _get_or_404(token, db)
