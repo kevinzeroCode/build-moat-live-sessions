@@ -205,6 +205,32 @@
     }
     .analytics-panel.show { display: flex; }
     .analytics-panel .hi { color: #3fb950; }
+
+    /* ── Editable TARGET field ── */
+    .val.editable {
+      cursor: text;
+      position: relative;
+    }
+    .val.editable:not(.editing):hover::after {
+      content: ' ✎';
+      color: #6e7681;
+      font-size: 11px;
+    }
+    .val.editable.no-edit { cursor: default; }
+    .val.editable.no-edit:hover::after { content: none; }
+
+    .target-input {
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid #3fb950;
+      outline: none;
+      color: #e6edf3;
+      font-family: inherit;
+      font-size: 13px;
+      width: min(420px, 60vw);
+      padding: 0 0 1px;
+      caret-color: #3fb950;
+    }
   </style>
 </head>
 <body>
@@ -248,7 +274,7 @@
         </div>
         <div class="info-row">
           <span class="lbl">TARGET</span>
-          <span class="val" id="iTarget"></span>
+          <span class="val editable" id="iTarget" title="click to edit target URL"></span>
         </div>
         <div class="info-sep"></div>
         <div class="meta-grid">
@@ -367,9 +393,11 @@
     if (info.is_deleted) {
       delBtn.disabled = true;
       delBtn.textContent = 'deleted';
+      $('iTarget').classList.add('no-edit');
     } else {
       delBtn.disabled = false;
       delBtn.textContent = 'delete';
+      $('iTarget').classList.remove('no-edit');
     }
   }
 
@@ -450,6 +478,78 @@
     if (!token) return;
     window.open(`/r/${token}`, '_blank', 'noopener,noreferrer');
   });
+
+  // ── Edit target URL ───────────────────────────────────────────────────────
+
+  let editingTarget = false;
+  let originalTarget = '';
+
+  $('iTarget').addEventListener('click', () => {
+    if (editingTarget || $('iTarget').classList.contains('no-edit')) return;
+    editingTarget = true;
+    originalTarget = $('iTarget').textContent;
+
+    const input = document.createElement('input');
+    input.className = 'target-input';
+    input.value = originalTarget;
+    input.spellcheck = false;
+    input.autocomplete = 'off';
+
+    $('iTarget').classList.add('editing');
+    $('iTarget').textContent = '';
+    $('iTarget').appendChild(input);
+    input.focus();
+    input.select();
+
+    input.addEventListener('keydown', async e => {
+      if (e.key === 'Enter') { e.preventDefault(); await confirmEdit(input.value.trim()); }
+      if (e.key === 'Escape') { cancelEdit(); }
+    });
+
+    input.addEventListener('blur', () => {
+      setTimeout(() => {
+        if (editingTarget) {
+          const v = input.value.trim();
+          if (v && v !== originalTarget) confirmEdit(v);
+          else cancelEdit();
+        }
+      }, 120);
+    });
+  });
+
+  function cancelEdit() {
+    editingTarget = false;
+    $('iTarget').classList.remove('editing');
+    $('iTarget').textContent = originalTarget;
+  }
+
+  async function confirmEdit(newUrl) {
+    if (!editingTarget) return;
+    editingTarget = false;
+    $('iTarget').classList.remove('editing');
+
+    if (!newUrl || newUrl === originalTarget) { cancelEdit(); return; }
+
+    try {
+      const r = await fetch(`/api/qr/${token}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: newUrl }),
+      });
+
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        throw new Error(e.detail || `HTTP ${r.status}`);
+      }
+
+      const info = await r.json();
+      clearNotice();
+      render(info, null);
+    } catch (e) {
+      notice(`✗ update failed: ${e.message}`);
+      $('iTarget').textContent = originalTarget;
+    }
+  }
 
   // ── Soft delete ───────────────────────────────────────────────────────────
 
